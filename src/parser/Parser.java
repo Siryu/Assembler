@@ -1,7 +1,7 @@
 package parser;
 
-import tokenizer.Token;
 import tokenizer.TokenBox;
+import tokenizer.tokens.Token;
 
 public class Parser {
 

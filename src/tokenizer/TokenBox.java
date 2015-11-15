@@ -3,6 +3,8 @@ package tokenizer;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
+import tokenizer.tokens.Token;
+
 public class TokenBox {
 	Deque<Token> tokens;
 	
@@ -28,5 +30,9 @@ public class TokenBox {
 	
 	public void pushOntoBack(Token token){
 		this.tokens.addLast(token);
+	}
+	
+	public Token getFromBack() {
+		return tokens.pollLast();
 	}
 }
