@@ -1,191 +1,176 @@
 package tokenizer;
 
-import java.util.ArrayList;
-
-import tokenizer.tokens.AlphaToken;
 import tokenizer.tokens.CondToken;
-import tokenizer.tokens.DataProcToken;
-import tokenizer.tokens.DigitToken;
-import tokenizer.tokens.HexDigitToken;
+import tokenizer.tokens.DecToken;
+import tokenizer.tokens.HexToken;
+import tokenizer.tokens.InstructionToken;
 import tokenizer.tokens.LabelToken;
-import tokenizer.tokens.LdrStrToken;
-import tokenizer.tokens.NameToken;
+import tokenizer.tokens.OperationToken;
+import tokenizer.tokens.Params2Token;
+import tokenizer.tokens.Params3Token;
 import tokenizer.tokens.RegisterToken;
 import tokenizer.tokens.Token;
 
 public class Tokenizer {
-	private static State currentState = State.A;	
 	
 	public enum State {
-		A, B, C, D, E, F, G, H;
+		COMMAND, PARAMS;
 	}
 	
-	public static TokenBox tokenize(char[] instructions) {
-		int counter = 0;
-		TokenBox tokens = new TokenBox();
-		while(counter < instructions.length) {
-			char currentPart = instructions[counter++];
+	private static State currentState = State.COMMAND; 
+	private static TokenBox tokenBox;
+	
+	public static TokenBox tokenize(String[] instructions) {
+		tokenBox = new TokenBox();
+		for(String piece : instructions) {
+			piece = piece.toUpperCase();
 			switch(currentState) {
-				case A: {
-					if(currentPart == '0') {
-						tokens.pushOntoBack(new DigitToken(currentPart));
-						currentState = State.C;
+				case COMMAND: {
+					if(piece.endsWith(":")) {
+						// LABEL
+						// remove the :
+						// create LabelToken
+						piece = piece.replace(":", "");
+						tokenBox.pushOntoBack(new LabelToken(piece));
 					}
-					else if(currentPart == 'm' || currentPart == 'M' || currentPart == 'a' || currentPart == 'A' || 
-							currentPart == 'l' || currentPart == 'L' || currentPart == 'o' || currentPart == 'O' ||
-							currentPart == 's' || currentPart == 'S' || currentPart == 'r' || currentPart == 'R') {
-						tokens.pushOntoBack(new AlphaToken(currentPart));
-						currentState = State.B;
+					else if(piece.startsWith("B")) {
+						// BRANCH
+						// remove the b
+						piece = piece.replace("B", "");
+						// create BranchToken
+						tokenBox.pushOntoBack(new OperationToken("B"));
 					}
-					else if(currentPart == 'b' || currentPart == 'B') {
-						// branch
-						tokens.push(new AlphaToken(currentPart));
-						currentState = State.E;
+					else if(piece.startsWith("MOVW")) {
+						tokenBox.pushOntoBack(new OperationToken("MOVW"));
+						piece = piece.replace("MOVW", "");
 					}
+					else if(piece.startsWith("MOVT")) {
+						tokenBox.pushOntoBack(new OperationToken("MOVT"));
+						piece = piece.replace("MOVT", "");
+					}
+					else if(piece.startsWith("LDR")) {
+						tokenBox.pushOntoBack(new OperationToken("LDR"));
+						piece = piece.replace("LDR", "");
+					}
+					else if(piece.startsWith("STR")) {
+						tokenBox.pushOntoBack(new OperationToken("STR"));
+						piece = piece.replace("STR", "");
+					}
+					else if(piece.startsWith("ADD")) {
+						tokenBox.pushOntoBack(new OperationToken("ADD"));
+						piece = piece.replace("ADD", "");
+					}
+					else if(piece.startsWith("ORR")) {
+						tokenBox.pushOntoBack(new OperationToken("ORR"));
+						piece.replace("ORR", "");
+					}
+					else if(piece.startsWith("SUB")) {
+						tokenBox.pushOntoBack(new OperationToken("SUB"));
+						piece.replace("SUB", "");
+					}
+					checkForFlag(piece);
+					tryGetOpCode(piece);
+					currentState = State.PARAMS;
 					break;
 				}
-				case B: {
-					if(currentPart == ':') {
-						// determine what line this label is on tooo!!!!!!!!!!!!!!!!!!!!!!
-						String labelName = "";
-						Token lastToken = tokens.getFromBack();
-						if(lastToken.getClass().equals(AlphaToken.class)) {
-							AlphaToken at = (AlphaToken)lastToken;
-							labelName = labelName + at.getValue();
-						}
-						else {
-							tokens.pushOntoBack(lastToken);
-						}
-						labelName = new StringBuilder(labelName).reverse().toString();
-						tokens.pushOntoBack(new LabelToken(labelName));
-						currentState = State.A;
+				
+				case PARAMS: {
+					if(piece.startsWith("R")) {
+						// register
+						piece = piece.replace(",", "");
+						piece = piece.replace("R", "");
+						tokenBox.pushOntoBack(new RegisterToken(piece));
 					}
-					else if(currentPart == ' ') {
-						boolean done = false;
-						ArrayList<Character> chars = new ArrayList<Character>();
-						while(!done) {
-							Token lastChar = tokens.getFromBack();
-							if(lastChar.getClass().equals(AlphaToken.class)) {
-								chars.add(((AlphaToken)lastChar).getValue());
-							}
-							else {
-								tokens.pushOntoBack(lastChar);
-								done = true;
-							}
-						}
-						StringBuilder sb = new StringBuilder();
-						for(int i = chars.size() - 1; i >= 0; i--) {
-							sb.append(chars.get(i));
-						}
-						if(sb.toString().contains("[ls][dt]r")){
-							tokens.pushOntoBack(new LdrStrToken(sb.toString()));
-						}
-						else {
-							tokens.pushOntoBack(new DataProcToken(sb.toString()));
-						}
+					else if(piece.startsWith("0X")) {
+						// hex number
+						piece = piece.replace("0X", "");
+						tokenBox.pushOntoBack(new HexToken(piece));
 					}
-					else if(isDigit(currentPart)) {
-						tokens.pushOntoBack(new DigitToken(currentPart));
+					else if(piece.matches("-*\\d+")) {
+						tokenBox.pushOntoBack(new DecToken(piece));
 					}
-					else if(currentPart == ',') {
-						Token secondNumber = tokens.getFromBack();
-						Token firstNumber = tokens.getFromBack();
-						if(firstNumber.getClass().equals(DigitToken.class)) {
-							tokens.getFromBack();
-							DigitToken num1 = (DigitToken)firstNumber;
-							DigitToken num2 = (DigitToken)secondNumber;
-							String num = num1.getValue() + "" + num2.getValue();
-							tokens.pushOntoBack(new RegisterToken(num));
-						}
-						else {
-							tokens.pushOntoBack(new RegisterToken(((DigitToken)secondNumber).getValue() + ""));
-						}
-						currentState = State.A;
+					else if(piece.contains("\\N")) {
+						// end the instruction
+						// break down token box to create the instructionToken
+						tryCreateInstruction();
+						currentState = State.COMMAND;
 					}
-					else {
-						tokens.pushOntoBack(new AlphaToken(currentPart));
-					}
-					break;
-				}
-				case C: {
-					if(currentPart == 'x' || currentPart == 'X') {
-						tokens.pushOntoBack(new AlphaToken(currentPart));
-						currentState = State.D;
-					}
-					break;
-				}
-				case D: {
-					if(isDigit(currentPart)) {
-						tokens.pushOntoBack(new DigitToken(currentPart));
-					}
-					else if(currentPart == 'a' || currentPart == 'A' || currentPart == 'b' || currentPart == 'B' ||
-							currentPart == 'c' || currentPart == 'C' || currentPart == 'd' || currentPart == 'D' ||
-							currentPart == 'e' || currentPart == 'E' || currentPart == 'f' || currentPart == 'F') {
-						tokens.pushOntoBack(new HexDigitToken(currentPart));
-					}
-					else {
-						// go back through and convert to a HexToken
-						currentState = State.A;
-					}
-					break;
-				}
-				case E: {
-					if(currentPart == 'E' || currentPart == 'e' || currentPart == 'N' || currentPart == 'n' ||
-					   currentPart == 'a' || currentPart == 'A' || currentPart == 'q' || currentPart == 'Q' || 
-					   currentPart == 'l' || currentPart == 'L') {
-						tokens.pushOntoBack(new AlphaToken(currentPart));
-					}
-					else if(currentPart == ' '){
-						AlphaToken secondLetter = (AlphaToken)tokens.getFromBack();
-						if(secondLetter.getValue() == 'b' || secondLetter.getValue() == 'B') {
-							tokens.pushOntoBack(secondLetter);
-							tokens.pushOntoBack(new CondToken("AL"));
-						}
-						else {
-							AlphaToken firstLetter = (AlphaToken)tokens.getFromBack();
-							tokens.pushOntoBack(new CondToken(firstLetter.getValue() + "" + secondLetter.getValue()));
-						}
-						currentState = State.F;
-					}
-				}
-				case F: {
-					if(currentPart != '\\' && currentPart != ' ') {
-						tokens.pushOntoBack(new AlphaToken(currentPart));
-					}
-					else {
-						boolean done = false;
-						ArrayList<Character> nameChars = new ArrayList<Character>();
-						while(!done) {
-							Token lastChar = tokens.getFromBack();
-							if(lastChar.getClass().equals(AlphaToken.class)) {
-								nameChars.add(((AlphaToken)lastChar).getValue());
-							}
-							else {
-								tokens.pushOntoBack(lastChar);
-								done = true;
-							}
-						}
-						StringBuilder sb = new StringBuilder();
-						for(int i = nameChars.size() - 1; i >= 0; i--) {
-							sb.append(nameChars.get(i));
-						}
-						tokens.pushOntoBack(new NameToken(sb.toString()));
-					}
-				}
-				default: {
 					break;
 				}
 			}
 		}
+		return tokenBox;
+	}
+
+	private static void tryGetOpCode(String piece) {
+	
+		if(piece.contains("EQ")) {
+			// equal
+			tokenBox.pushOntoBack(new CondToken("EQ"));
+		}
+		else if(piece.contains("NE")) {
+			// not equal
+			tokenBox.pushOntoBack(new CondToken("NE"));
+		}
+		else {
+			// Always
+			tokenBox.pushOntoBack(new CondToken("AL"));
+		}
 	}
 	
-	private static boolean isDigit(char currentPart) {
-		boolean isDigit = false;
-		if(currentPart == '0' || currentPart == '1' || currentPart == '2' || currentPart == '3' || 
-		   currentPart == '4' || currentPart == '5' || currentPart == '6' || currentPart == '7' || 
-		   currentPart == '8' || currentPart == '9') {
-			isDigit = true;
+	private static void checkForFlag(String piece) {
+		if(piece.startsWith("S")) {
+			OperationToken op = (OperationToken)tokenBox.getFromBack();
+			op.addFlag("S");
+			tokenBox.pushOntoBack(op);
 		}
-		return isDigit;
+	}
+	
+	private static void tryCreateInstruction() {
+		// reverse back to null or back to instruction
+		Token lastToken = tokenBox.getFromBack();
+		if(lastToken.getClass().equals(HexToken.class)) {
+			Token reg2 = tokenBox.getFromBack();
+			if(reg2.getClass().equals(RegisterToken.class)) {
+				Token reg1 = tokenBox.getFromBack();
+				if(reg1.getClass().equals(RegisterToken.class)) {
+					// params3
+					RegisterToken targetR = (RegisterToken)reg2;
+					RegisterToken sourceR = (RegisterToken)reg1;
+					HexToken offset = (HexToken)lastToken;
+					tokenBox.pushOntoBack(new Params3Token(targetR.getValue(), sourceR.getValue(), offset.getValue()));
+				}
+				else {
+					// params2
+					tokenBox.pushOntoBack(reg1);
+					RegisterToken register = (RegisterToken)reg2;
+					HexToken offset = (HexToken)lastToken;
+					tokenBox.pushOntoBack(new Params2Token(register.getValue(), offset.getValue()));
+				}
+			}
+		}
+		else if(lastToken.getClass().equals(RegisterToken.class)) {
+			RegisterToken targetR = (RegisterToken)tokenBox.getFromBack();
+			RegisterToken sourceR = (RegisterToken)lastToken;
+			tokenBox.pushOntoBack(new Params3Token(targetR.getValue(), sourceR.getValue(), "0"));
+		}
+		else if(lastToken.getClass().equals(DecToken.class)) {
+			tokenBox.pushOntoBack(lastToken);
+		}
+		
+		Token params = tokenBox.getFromBack();
+		Token condition = tokenBox.getFromBack();
+		Token opCode = tokenBox.getFromBack();
+		Token optionalLabel = tokenBox.getFromBack();
+		if(null != optionalLabel && optionalLabel.getClass().equals(LabelToken.class)) {
+			tokenBox.pushOntoBack(new InstructionToken(optionalLabel, opCode, condition, params));
+		}
+		else if(null == optionalLabel) {
+				tokenBox.pushOntoBack(new InstructionToken(null, opCode, condition, params));
+			}
+		else if(InstructionToken.class.equals(optionalLabel.getClass())) {
+			tokenBox.pushOntoBack(optionalLabel);
+			tokenBox.pushOntoBack(new InstructionToken(null, opCode, condition, params));
+		}
 	}
 }

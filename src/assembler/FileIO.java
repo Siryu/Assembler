@@ -11,20 +11,20 @@ import java.util.Scanner;
 public class FileIO {
 	
 	// input read from stackoverflow.com/questions/13151714/reading-text-into-a-char-array-in-java
-	public static char[] importFile(String fileName) {
+	public static String[] importFile(String fileName) {
 		String totalFile = "";
 		File file = new File(fileName);
 		try {
 			Scanner scanner = new Scanner(file);
 			while(scanner.hasNextLine()) {
-				totalFile = totalFile + "\n" + scanner.nextLine();
+				totalFile = totalFile  + scanner.nextLine() + " \\n ";
 			}
 			scanner.close();
 		} catch (FileNotFoundException e) {
 			System.err.println("error finding file " + fileName);
 			e.printStackTrace();
 		}
-		return totalFile.toCharArray();
+		return totalFile.split(" ");
 	}
 	
 	// output read from stackoverflow.com/questions/4350084/byte-to-file-in-java
